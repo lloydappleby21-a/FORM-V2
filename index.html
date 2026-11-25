@@ -160,6 +160,20 @@ textarea{min-height:70px;resize:vertical}
     <button data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>More</button>
   </nav>
 </div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,updateProfile} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {getFirestore,collection,doc,setDoc,deleteDoc,onSnapshot,getDocs} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+const app=initializeApp({apiKey:"AIzaSyBVc1Owz0WvJN0hI_nnTwCL1Z7CoHAHENY",authDomain:"form-f41ba.firebaseapp.com",projectId:"form-f41ba",storageBucket:"form-f41ba.firebasestorage.app",messagingSenderId:"786319080290",appId:"1:786319080290:web:272c42484b1d31181eca3b"});
+const auth=getAuth(app),db=getFirestore(app);
+window.FB={db,auth,doc,collection,setDoc,deleteDoc,onSnapshot,getDocs,
+  onAuth:cb=>onAuthStateChanged(auth,cb),
+  signIn:(e,p)=>signInWithEmailAndPassword(auth,e,p),
+  signUp:async(e,p,n)=>{const c=await createUserWithEmailAndPassword(auth,e,p);if(n){await updateProfile(c.user,{displayName:n});await setDoc(doc(db,"users",c.user.uid),{name:n},{merge:true});}return c.user;},
+  reset:e=>sendPasswordResetEmail(auth,e),
+  signOut:()=>signOut(auth)};
+window.dispatchEvent(new Event("fbready"));
+</script>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -178,7 +192,7 @@ const r1=n=>Math.round((+n||0)*10)/10, r0=n=>Math.round(+n||0);
 const sum=(a,f)=>a.reduce((s,x)=>s+(+f(x)||0),0);
 const mmss=s=>pad(Math.floor(s/60))+":"+pad(s%60);
 let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),1800);}
-const LS=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem("form."+k)||"null");localStorage.setItem("form."+k,JSON.stringify(v));}catch(e){return null;}};
+const LS=(k,v)=>{try{if(v===undefined)return JSON.parse(localStorage.getItem("form."+k)||"null");localStorage.setItem("form."+k,JSON.stringify(v));if(k==="active"&&v&&v.day)rememberDay(v);}catch(e){return null;}};
 
 // ---------- exercise library ----------
 const MUSCLES=["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Calves","Core"];
@@ -212,24 +226,6 @@ async function remove(coll,id){
   delete S[coll][id];saveCache();
   if(S.db){try{await S.db.collection(coll).doc(id).delete();}catch(e){console.warn("db del",e);}}
 }
-async function connect(){
-  try{
-    const [db,user,sample,assets]=await Promise.all([claude.use("db"),claude.use("user"),claude.use("sample"),claude.use("assets")]);
-    S.sample=sample; S.assets=assets;
-    if(!db){render();return;}
-    S.db=db; S.online=true;
-    for(const coll of COLLS){
-      db.collection(coll).onSnapshot(snap=>{
-        const o={};snap.docs.forEach(d=>{o[d.id]=d.data();});
-        if(coll==="settings"){ if(o.main) S.settings={...DEFAULT_SETTINGS,...o.main}; }
-        else S[coll]=o;
-        saveCache();render();
-      },e=>console.warn("snapshot",coll,e));
-    }
-  }catch(e){console.warn("connect",e);}
-  render();
-}
-
 // ---------- derived ----------
 const dayDoc=d=>S.days[d]||{meals:[]};
 const dayTotals=d=>{const m=dayDoc(d).meals||[];return{cal:sum(m,x=>x.cal),p:sum(m,x=>x.p),c:sum(m,x=>x.c),f:sum(m,x=>x.f)};};
@@ -466,12 +462,14 @@ function lbList(){
     return `<div class='card'><div class='row between'><h2 style='margin:0;color:var(--fg);text-transform:none;letter-spacing:.01em;font-size:19px'>${esc(x.n)}</h2><span class='pill ${has?'on':''}'>${has?'At gym':'Unconfirmed'}</span></div>
     <div class='muted small' style='margin:4px 0 8px'>${esc(x.m)} · ${x.q.length?esc(x.q.map(t=>EQL[t]).join(', ')):'Bodyweight'}</div>
     <div class='small' style='margin:0 0 8px;line-height:1.6'>${targetsHtml(x.n,x.m)}</div><details><summary style='cursor:pointer;font-weight:600'>How to do it</summary><div class='small' style='margin:8px 0;line-height:1.6'><b>Setup:</b> ${esc(x.s)}<br><b>Move:</b> ${esc(x.v)}<br><b>Avoid:</b> ${esc(x.a)}</div></details>
-        </div>`;
+    ${VID[x.n]?`<div style='margin-top:8px'><a class='btn' style='width:100%;text-decoration:none;background:var(--accent);color:var(--accent-fg);border-color:var(--accent)' href='https://www.youtube.com/watch?v=${VID[x.n][0]}' target='_blank' rel='noopener'>▶ Watch form video (${esc(VID[x.n][1])})</a></div>`:''}
+    <div style='margin-top:8px'>${jnLinks(x.n,x.m)}</div>
+    <div class='grid2' style='margin-top:8px'><a class='btn' style='text-decoration:none' href='${yt}' target='_blank' rel='noopener'>YouTube demos</a><a class='btn' style='text-decoration:none' href='${tt}' target='_blank' rel='noopener'>TikTok demos</a></div></div>`;
   }).join('');
 }
 function lib(){
   const ms=['All','Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'];
-  return `<div class='stack'><div class='muted small'>${LX.length} muscle-building exercises with quick form cues.  Gym matching uses the gym chosen in the Plan tab (${esc(GYMS[PL.g].n)}).</div>
+  return `<div class='stack'><div class='muted small'>${LX.length} muscle-building exercises with quick form cues. Video buttons open searches for tutorials, so pick a coach whose form matches the cues. Gym matching uses the gym chosen in the Plan tab (${esc(GYMS[PL.g].n)}).</div>
   ${muscleMap()}<input id='lb-q' type='search' placeholder='Search exercises' aria-label='Search exercises' value='${esc(LB.q)}'>
   <select id='lb-m' aria-label='Muscle group'>${ms.map(m=>`<option ${LB.m===m?'selected':''}>${m}</option>`).join('')}</select>
   <div class='row'><button class='pill ${LB.only?'on':''}' data-lb='1' style='min-height:34px;padding:6px 12px'>Only exercises available at my gym</button></div></div>
@@ -482,15 +480,16 @@ document.addEventListener('change',e=>{if(e.target.id==='lb-m'){LB.m=e.target.va
 document.addEventListener('click',e=>{if(e.target.closest('[data-lb]')){LB.only=!LB.only;render();}});
 
 // ---------- v2: nav, focus, coach, check-in ----------
-const NAVOF={stats:"body",gyms:"more",pts:"more",plan:"more",lib:"more"};
-function wrap(t,h){
+const NAVOF={coach:"more",stats:"body",gyms:"more",pts:"more",plan:"more",lib:"more"};
+function wrap(t,h){savePrefs();
   if(t==="body"||t==="stats")return `<div class="seg"><button aria-pressed="${t==="body"}" data-act2="goTab" data-t="body">Body</button><button aria-pressed="${t==="stats"}" data-act2="goTab" data-t="stats">Stats</button></div>`+h;
-  if(["gyms","pts","plan","lib"].includes(t))return `<button class="btn sm" style="align-self:flex-start" data-act2="goTab" data-t="more">‹ More</button>`+h;
+  if(["gyms","pts","plan","lib","coach"].includes(t))return `<button class="btn sm" style="align-self:flex-start" data-act2="goTab" data-t="more">‹ More</button>`+h;
   return h;
 }
 function more(){
   const it=[["gyms","Gyms","Hours, ratings and kit for gyms near you"],["pts","Personal trainers","Scored by review volume and rating"],["plan","Workout planner","Build a session around a gym's equipment"],["lib","Exercise library","Form cues and demo videos"]];
-  return it.map(x=>`<button class="card" style="text-align:left;width:100%" data-act2="goTab" data-t="${x[0]}"><div class="mid num">${x[1]}</div><div class="muted small" style="margin-top:6px">${x[2]}</div></button>`).join("");
+  if(S.isCoach)it.push(["coach","Coach dashboard","See each member's food, workouts and weight"]);
+  return it.map(x=>`<button class="card" style="text-align:left;width:100%" data-act2="goTab" data-t="${x[0]}"><div class="mid num">${x[1]}</div><div class="muted small" style="margin-top:6px">${x[2]}</div></button>`).join("")+`<div class="muted small">${S.email?"Signed in as "+esc(S.email)+". ":""}Your entries are saved to your account. The app owner can view members' logged food, workouts and body stats to coach them.</div><button class="btn block" data-act2="signOut">Sign out</button>`;
 }
 const SPL={ppl:["Push","Pull","Legs"],ul:["Upper","Lower"],fb:["Full body"]};
 const DAYM={Push:["Chest","Shoulders","Triceps"],Pull:["Back","Biceps"],Legs:["Quads","Hamstrings","Glutes","Calves"],Upper:["Chest","Back","Shoulders","Biceps","Triceps"],Lower:["Quads","Hamstrings","Glutes","Calves","Core"],"Full body":["Chest","Back","Quads","Shoulders","Hamstrings","Core"]};
@@ -499,7 +498,7 @@ const splitKey=()=>SPL[S.settings.split]?S.settings.split:"ppl";
 const dayName=l=>l==="Full body"?l:l+" day";
 function nextDay(){const L=SPL[splitKey()];const last=workoutsSorted().find(w=>w.type==="gym"&&w.day&&L.includes(w.day));return last?L[(L.indexOf(last.day)+1)%L.length]:L[0];}
 function findLXOld(n){const k=String(n).toLowerCase();return LX.find(x=>x.n.toLowerCase()===k)||LX.find(x=>x.n.toLowerCase().includes(k)||k.includes(x.n.toLowerCase()));}
-function genDay(label){
+function genDay(label){const mem=(S.settings.dayEx||{})[label];if(mem&&mem.length)return mem.map(e=>({name:e.name,muscle:e.muscle,sets:e.sets||3}));
   const rt=Object.values(S.routines).find(r=>r.name.toLowerCase().includes(label.toLowerCase().split(" ")[0]));
   if(rt&&(rt.exercises||[]).length)return rt.exercises.map(e=>({name:e.name,muscle:e.muscle,sets:+e.sets||3}));
   const eq=plEq(),ms=DAYM[label],per=ms.length<=3?2:1,out=[];
@@ -517,7 +516,8 @@ function focus(){
   <div class="big num">${esc(dayName(nx))}</div><div class="muted" style="margin:6px 0 12px">${ex.length} exercises · ~${ex.length*9} min${under.length?" · Needs work: "+under.join(", "):""}</div>
   <button class="btn primary block" data-act2="startDay" data-d="${esc(nx)}">Start ${esc(dayName(nx))}</button></div>`;
 }
-function today(){return todayBase();}
+const LOCALV=location.protocol==="file:";
+function today(){return (LOCALV?`<div class="banner">You are viewing a local copy of the file. Settings and workouts are only remembered when you open the app from your website link.</div>`:"")+todayBase();}
 function ring(t,g){
   const arc=(R,sw,col,v,goal)=>{const C=2*Math.PI*R,p=Math.min(1,goal?v/goal:0);return `<circle cx="100" cy="100" r="${R}" stroke="var(--surface2)" stroke-width="${sw}" fill="none"/><circle class="arc" cx="100" cy="100" r="${R}" stroke="${col}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-p)}" style="--c:${C}"/>`;};
   const left=g.cal-t.cal;
@@ -633,11 +633,11 @@ function train(){
   const tiles=C.subs.map((x,i)=>{let meta="Log a session";if(cat==="weights"){const nx=nextOf(x[1]);meta=`Next: ${nx} · ${genDay(nx).length} exercises`;}return `<button class="card" style="text-align:left;width:100%" data-act2="subStart" data-cat="${cat}" data-i="${i}"><div class="row between"><div><div class="mid num">${esc(x[0])}</div><div class="muted small" style="margin-top:6px">${esc(meta)}</div></div><span class="pill on">Start</span></div></button>`;}).join("");
   const rs=Object.entries(S.routines).map(([id,r])=>({id,...r})).sort((a,b)=>a.name.localeCompare(b.name));
   const saved=cat==="weights"?`<div class="card"><div class="row between"><h2>Saved routines</h2><div class="row"><button class="btn sm" data-act="quick" data-type="gym">Blank</button><button class="btn sm" data-act="newRoutine">New</button></div></div>${rs.length?`<div class="list">${rs.map(r=>`<div class="item"><div class="grow"><div class="title">${esc(r.name)}</div><div class="meta">${(r.exercises||[]).map(e=>esc(e.name)).join(", ")||"No exercises"}</div></div><button class="btn sm" data-act="editRoutine" data-id="${r.id}">Edit</button><button class="btn sm primary" data-act="startRoutine" data-id="${r.id}">Start</button></div>`).join("")}</div>`:`<div class="empty">No saved routines yet. Build one in More → Workout planner.</div>`}</div>`:"";
-  return seg+lastCard+`<div class="card"><h2>Routines</h2><div class="seg">${Object.keys(TCAT).map(k=>`<button aria-pressed="${k===cat}" data-act2="trainCat" data-c="${k}">${TCAT[k].l}</button>`).join("")}</div></div>${tiles}${saved}`;
+  return seg+lastCard+favCard()+`<div class="card"><h2>Routines</h2><div class="seg">${Object.keys(TCAT).map(k=>`<button aria-pressed="${k===cat}" data-act2="trainCat" data-c="${k}">${TCAT[k].l}</button>`).join("")}</div></div>${tiles}${saved}`;
 }
 document.addEventListener("click",e=>{
   const a=e.target.closest("[data-act2]");if(!a)return;const d=a.dataset;
-  if(d.act2==="trainCat"){S.trainCat=d.c;render();}
+  if(d.act2==="trainCat"){S.trainCat=d.c;LS("trainCat",d.c);render();}
   else if(d.act2==="subStart"){
     const sub=TCAT[d.cat].subs[+d.i];
     if(d.cat==="weights")startDay(nextOf(sub[1]));
@@ -718,7 +718,7 @@ function jnLinks(name,m){
 function targetsHtml(name,m){const x=findLX(name),md=x&&MD[x.n];return (md?`<span class="pill on">${esc(md[0])}</span> <span class="muted">Also: ${esc(md[1])}</span>`:`<span class="pill on">${esc(m)}</span>`);}
 function muscleLine(name,m){return `<div class="small" style="margin:6px 0;line-height:1.7">${targetsHtml(name,m)}</div>`;}
 function muscleMap(){
-  return `<details class="card"><summary style="cursor:pointer;font-weight:600">Muscle map: which exercises hit which part</summary><div class="stack" style="margin-top:10px">${Object.keys(MM).map(g=>`<div><div class="row between"><b>${g}</b></div>${MM[g].map(sub=>{const L=LX.filter(x=>x.m===g&&MD[x.n]&&sub[1].test(MD[x.n][0].toLowerCase())).map(x=>x.n);return L.length?`<div class="small" style="margin-top:4px"><span class="muted">${sub[0]}:</span> ${L.map(esc).join(", ")}</div>`:"";}).join("")}</div>`).join("")}</div></details>`;
+  return `<details class="card"><summary style="cursor:pointer;font-weight:600">Muscle map: which exercises hit which part</summary><div class="stack" style="margin-top:10px">${Object.keys(MM).map(g=>`<div><div class="row between"><b>${g}</b><a class="small" style="color:var(--accent)" href="${ytq("Jeff Nippard best "+g+" exercises anatomy")}" target="_blank" rel="noopener">Jeff Nippard ▶</a></div>${MM[g].map(sub=>{const L=LX.filter(x=>x.m===g&&MD[x.n]&&sub[1].test(MD[x.n][0].toLowerCase())).map(x=>x.n);return L.length?`<div class="small" style="margin-top:4px"><span class="muted">${sub[0]}:</span> ${L.map(esc).join(", ")}</div>`:"";}).join("")}</div>`).join("")}</div></details>`;
 }
 function exSheet(swap){
   let q="",m="All";
@@ -740,7 +740,135 @@ document.addEventListener("click",e=>{
 });
 function startBtn(a){return a.started?`<button class="btn" disabled>Started ✓</button>`:`<button class="btn" data-act2="startWk">Start workout</button>`;}
 document.addEventListener("click",e=>{const b=e.target.closest('[data-act2="startWk"]');if(!b||!S.active)return;S.active.start=Date.now();S.active.started=true;LS("active",S.active);toast("Workout started");render();});
-const views={today,train,food,body,stats,gyms,pts,plan,lib,more};
+function favCard(){
+  const fs=Object.entries(S.routines).filter(([id,r])=>r.fav).map(([id,r])=>({id,...r})).sort((a,b)=>a.name.localeCompare(b.name));
+  if(!fs.length)return"";
+  return `<div class="card"><h2>★ Favourites</h2><div class="list">${fs.map(r=>`<div class="item"><div class="grow"><div class="title">${esc(r.name)}</div><div class="meta">${esc(r.type==="gym"?((r.exercises||[]).map(e=>e.name).join(", ")||"No exercises"):(r.style||r.type))}</div></div><button class="x" data-act2="favDel" data-id="${r.id}" aria-label="Remove favourite">✕</button><button class="btn sm primary" data-act2="favStart" data-id="${r.id}">Start</button></div>`).join("")}</div></div>`;
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act2]");if(!b)return;const d=b.dataset;
+  if(d.act2==="favSave"&&S.active){
+    const a=S.active;
+    openSheet(`<h2>Save to favourites</h2><div class="field"><label>Name</label><input id="favName" value="${esc(a.name)}"></div><div class="muted small">Saved workouts appear under Favourites in Train, so you can start them in one tap.</div><button class="btn primary block" id="favGo">Save</button>`);
+    $("#favGo").onclick=()=>{const name=$("#favName").value.trim()||a.name;save("routines",uid(),{name,type:a.type,style:a.style||null,fav:true,exercises:(a.exercises||[]).map(x=>({name:x.name,muscle:x.muscle||muscleOf(x.name),sets:x.sets.length,reps:"8–12"}))});closeSheet();toast("Saved to favourites");};
+  }else if(d.act2==="favStart"){
+    const r=S.routines[d.id];if(!r)return;
+    if(r.type==="gym")startWorkout({type:"gym",name:r.name,routineId:d.id,exercises:(r.exercises||[]).map(x=>({name:x.name,muscle:x.muscle,sets:[...Array(+x.sets||3)].map(()=>({kg:"",reps:"",done:false}))}))});
+    else startWorkout({type:r.type,name:r.name,style:r.style||undefined,exercises:[]});
+  }else if(d.act2==="favDel"){remove("routines",d.id);render();}
+});
+function rememberDay(a){
+  const list=(a.exercises||[]).map(e=>({name:e.name,muscle:e.muscle||muscleOf(e.name),sets:e.sets.length}));
+  if(!list.length)return;
+  const dx=S.settings.dayEx||{};
+  if(JSON.stringify(dx[a.day])===JSON.stringify(list))return;
+  save("settings","main",{...S.settings,dayEx:{...dx,[a.day]:list}});
+}
+function savePrefs(){LS("pl",{g:PL.g,goal:PL.goal,exp:PL.exp,time:PL.time,sess:PL.sess,eq:PL.eq?[...PL.eq]:null});}
+{const sp=LS("pl");if(sp)Object.assign(PL,sp,{eq:sp.eq?new Set(sp.eq):null});S.trainCat=LS("trainCat")||S.trainCat;}
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+
+// ---------- coach dashboard (owner / editors) ----------
+const COACH={list:null,sel:null,data:null};
+function coach(){
+  if(!S.isCoach)return `<div class="empty">The coach view is for the app owner and editors.</div>`;
+  if(COACH.list===null){coachLoad();return `<div class="empty">Loading members…</div>`;}
+  if(COACH.sel){
+    const m=COACH.list.find(x=>x.id===COACH.sel)||{name:"Member"},d=COACH.data;
+    const head=`<button class="btn sm" style="align-self:flex-start" data-act2="coachBack">‹ All members</button><div class="mid num">${esc(m.name)}</div>`;
+    if(!d)return head+`<div class="empty">Loading…</div>`;
+    const tg=(d.settings&&d.settings.main)||{};
+    const days=Object.keys(d.days).sort().slice(-7).reverse();
+    const ws=Object.values(d.workouts).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,8);
+    const bs=Object.entries(d.body).map(([date,b])=>({date,...b})).filter(b=>b.weight).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,6);
+    const row=(t,mt,v)=>`<div class="item"><div class="grow"><div class="title">${esc(t)}</div><div class="meta">${esc(mt)}</div></div><div class="val">${esc(v)}</div></div>`;
+    return head+`<div class="card"><h2>Targets</h2><div class="muted small">${esc(tg.goal||"No goal set")} · ${r0(tg.cal)||"–"} kcal · P ${r0(tg.protein)||"–"} C ${r0(tg.carbs)||"–"} F ${r0(tg.fat)||"–"}</div></div>
+    <div class="card"><h2>Food, last 7 logged days</h2>${days.length?`<div class="list">${days.map(k=>{const ml=d.days[k].meals||[];return row(fmtDate(k),`P ${r0(sum(ml,x=>x.p))} C ${r0(sum(ml,x=>x.c))} F ${r0(sum(ml,x=>x.f))}`,r0(sum(ml,x=>x.cal))+" kcal");}).join("")}</div>`:`<div class="empty">No food logged.</div>`}</div>
+    <div class="card"><h2>Workouts</h2>${ws.length?`<div class="list">${ws.map(w=>row(w.name||w.type,fmtDate(w.date)+(w.type==="gym"?" · "+(w.exercises||[]).length+" exercises":"")+(w.rpe?" · RPE "+w.rpe:""),w.type==="gym"?r0(sum(w.exercises||[],volOf))+" kg":(w.duration?r0(w.duration)+" min":""))).join("")}</div>`:`<div class="empty">No workouts logged.</div>`}</div>
+    <div class="card"><h2>Weight</h2>${bs.length?`<div class="list">${bs.map(b=>row(fmtDate(b.date),"",r1(b.weight)+" "+(tg.unit||"kg"))).join("")}</div>`:`<div class="empty">No weigh-ins.</div>`}</div>`;
+  }
+  return `<div class="row between"><div class="mid num">Members</div><button class="btn sm" data-act2="coachRefresh">Refresh</button></div>`+(COACH.list.length?COACH.list.map(m=>`<div class="card"><div class="row between"><div><div class="title" style="font-weight:600">${esc(m.name)}</div><div class="muted small">${esc(m.email||"")} · Last active ${m.lastSeen?fmtDate(ymd(new Date(m.lastSeen))):"never"}</div></div><button class="btn sm primary" data-act2="coachOpen" data-id="${esc(m.id)}">Open</button></div></div>`).join(""):`<div class="empty">No members yet. Share the link and give people Contributor access.</div>`);
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act2]");if(!b)return;const a=b.dataset.act2;
+  if(a==="coachOpen")coachOpen(b.dataset.id);
+  else if(a==="coachBack"){COACH.sel=null;render();}
+  else if(a==="coachRefresh"){COACH.list=null;COACH.sel=null;render();}
+});
+
+// ---------- Firebase: sign-in, per-user storage, coach ----------
+const AUTH={mode:"in",err:"",email:"",loading:true,done:false};
+function authEl(){let el=$("#auth");if(!el){el=document.createElement("div");el.id="auth";el.style.cssText="position:fixed;inset:0;z-index:100;background:var(--bg);overflow-y:auto;padding:calc(48px + env(safe-area-inset-top,0px)) 20px 40px";document.body.appendChild(el);}return el;}
+function hideAuth(){const el=$("#auth");if(el)el.remove();}
+function drawAuth(){
+  const el=authEl(),logo=`<div style="font-family:var(--display);font-weight:700;font-size:44px;letter-spacing:.14em;color:var(--accent)">FORM</div>`;
+  if(AUTH.loading){el.innerHTML=`<div style="max-width:380px;margin:0 auto" class="stack">${logo}<div class="muted">Loading…</div></div>`;return;}
+  const up=AUTH.mode==="up";
+  el.innerHTML=`<div style="max-width:380px;margin:0 auto" class="stack">${logo}<div class="muted">${up?"Create your account":"Sign in to your account"}</div>
+  ${up?`<div class="field"><label>Name</label><input id="auName" autocomplete="name"></div>`:""}
+  <div class="field"><label>Email</label><input id="auEmail" type="email" inputmode="email" autocomplete="email" value="${esc(AUTH.email)}"></div>
+  <div class="field"><label>Password</label><input id="auPass" type="password" autocomplete="${up?"new-password":"current-password"}"></div>
+  <div class="small" style="color:var(--bad);min-height:18px">${esc(AUTH.err)}</div>
+  <button class="btn primary block" id="auGo">${up?"Create account":"Sign in"}</button>
+  <button class="btn block" id="auSw">${up?"I already have an account":"Create a new account"}</button>
+  ${up?"":`<button class="btn block" id="auReset">Forgot password</button>`}
+  <div class="muted small">Your food, workouts and body entries are saved to your account. The app owner can view them to coach you.</div></div>`;
+  const val=id=>($("#"+id)||{}).value||"";
+  const msg=e=>({"auth/invalid-credential":"Email or password is wrong.","auth/invalid-email":"That email address isn't valid.","auth/email-already-in-use":"An account with that email already exists.","auth/weak-password":"Use a password of at least 6 characters.","auth/too-many-requests":"Too many attempts. Try again later.","auth/network-request-failed":"No connection. Try again."})[e&&e.code]||"Something went wrong. Try again.";
+  $("#auSw").onclick=()=>{AUTH.email=val("auEmail");AUTH.mode=up?"in":"up";AUTH.err="";drawAuth();};
+  $("#auGo").onclick=async()=>{AUTH.email=val("auEmail").trim();const p=val("auPass");if(!AUTH.email||!p){AUTH.err="Enter your email and password.";drawAuth();return;}$("#auGo").disabled=true;try{if(up)await FB.signUp(AUTH.email,p,val("auName").trim());else await FB.signIn(AUTH.email,p);}catch(e){AUTH.err=msg(e);drawAuth();}};
+  if(!up)$("#auReset").onclick=async()=>{AUTH.email=val("auEmail").trim();if(!AUTH.email){AUTH.err="Enter your email first.";drawAuth();return;}try{await FB.reset(AUTH.email);AUTH.err="Reset email sent. Check your inbox.";}catch(e){AUTH.err=msg(e);}drawAuth();};
+}
+function startFirebase(){
+  S.sample={limits:async()=>({images:false}),json:async p=>{
+    const q=String(p).split("Food:").pop().trim(),m=q.match(/(\d+(?:\.\d+)?)\s*(?:g|grams?)\b/i),gr=m?+m[1]:100,term=(m?q.replace(m[0],""):q).trim()||q,k=gr/100;
+    const r=await fetch("https://world.openfoodfacts.org/cgi/search.pl?action=process&json=1&page_size=15&fields=product_name,brands,nutriments&search_terms="+encodeURIComponent(term));
+    const j=await r.json(),out=[];
+    (j.products||[]).forEach(x=>{const n=x.nutriments||{};if(n["energy-kcal_100g"]==null)return;out.push({name:(x.product_name||"Product")+(x.brands?" ("+x.brands.split(",")[0]+")":""),serving:gr+" g",cal:n["energy-kcal_100g"]*k,p:(n.proteins_100g||0)*k,c:(n.carbohydrates_100g||0)*k,f:(n.fat_100g||0)*k});});
+    return out.slice(0,8);}};
+  S.assets={upload:file=>new Promise((res,rej)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const k=Math.min(1,520/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);res({id:"inline",url:c.toDataURL("image/jpeg",.7)});};img.onerror=rej;img.src=u;})};
+  drawAuth();
+  setTimeout(()=>{if(!AUTH.done&&!window.FB){hideAuth();}},8000);
+  const go=()=>{AUTH.done=true;window.FB.onAuth(onUser);};
+  if(window.FB)go();else window.addEventListener("fbready",go,{once:true});
+}
+async function onUser(u){
+  const F=window.FB;
+  if(!u){AUTH.loading=false;S.db=null;S.online=false;S.isCoach=false;drawAuth();return;}
+  hideAuth();
+  const prev=LS("uid");
+  if(prev&&prev!==u.uid){COLLS.forEach(c=>S[c]=c==="settings"?{...DEFAULT_SETTINGS}:{});S.active=null;LS("active",null);saveCache();}
+  S.uid=u.uid;S.email=u.email;S.online=true;
+  const col=c=>F.collection(F.db,"users",u.uid,c);
+  S.db={collection:c=>({doc:id=>({set:d=>F.setDoc(F.doc(F.db,"users",u.uid,c,id),d),delete:()=>F.deleteDoc(F.doc(F.db,"users",u.uid,c,id))})})};
+  F.setDoc(F.doc(F.db,"users",u.uid),{email:u.email,lastSeen:Date.now()},{merge:true}).catch(()=>{});
+  if(!prev){// first sign-in on this device: upload anything already entered
+    try{for(const c of COLLS){if(c==="settings")continue;for(const id of Object.keys(S[c]||{}))await F.setDoc(F.doc(F.db,"users",u.uid,c,id),S[c][id]);}await F.setDoc(F.doc(F.db,"users",u.uid,"settings","main"),S.settings);}catch(e){}
+  }
+  LS("uid",u.uid);
+  F.getDocs(F.collection(F.db,"users")).then(()=>{S.isCoach=true;render();}).catch(()=>{S.isCoach=false;});
+  for(const coll of COLLS){
+    F.onSnapshot(col(coll),snap=>{
+      const o={};snap.docs.forEach(d=>{o[d.id]=d.data();});
+      if(coll==="settings"){if(o.main)S.settings={...DEFAULT_SETTINGS,...o.main};}else S[coll]=o;
+      saveCache();render();
+    },e=>console.warn("snapshot",coll,e));
+  }
+  render();
+}
+async function coachLoad(){
+  COACH.list=[];
+  try{const snap=await FB.getDocs(FB.collection(FB.db,"users"));COACH.list=snap.docs.map(d=>{const v=d.data();return{id:d.id,name:v.name||v.email||"Member",email:v.email,lastSeen:v.lastSeen};}).sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0));}catch(e){}
+  render();
+}
+async function coachOpen(id){
+  COACH.sel=id;COACH.data=null;render();
+  const g=c=>FB.getDocs(FB.collection(FB.db,"users",id,c)).then(sn=>{const o={};sn.docs.forEach(d=>o[d.id]=d.data());return o;}).catch(()=>({}));
+  const [days,workouts,body,settings]=await Promise.all([g("days"),g("workouts"),g("body"),g("settings")]);
+  COACH.data={days,workouts,body,settings};render();
+}
+document.addEventListener("click",e=>{if(e.target.closest('[data-act2="signOut"]'))FB.signOut();});
+const views={today,train,food,body,stats,gyms,pts,plan,lib,more,coach};
 function render(){
   $("#hdrDate").textContent=new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
   const nt=NAVOF[S.tab]||S.tab;$$("#tabs button").forEach(b=>{if(b.dataset.tab===nt)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
@@ -785,7 +913,7 @@ function trainBase(){
   if(S.active)return activeWorkout();
   const seg=`<div class="seg">${["routines","history"].map(k=>`<button aria-pressed="${S.trainView===k}" data-act="trainView" data-v="${k}">${k[0].toUpperCase()+k.slice(1)}</button>`).join("")}</div>`;
   if(S.trainView==="history"){const ws=workoutsSorted();return seg+`<div class="card"><h2>History</h2>${ws.length?`<div class="list">${ws.map(wItem).join("")}</div>`:`<div class="empty">No workouts yet.</div>`}</div>`;}
-  const rs=Object.entries(S.routines).map(([id,r])=>({id,...r})).sort((a,b)=>a.name.localeCompare(b.name));
+  const rs=Object.entries(S.routines).map(([id,r])=>({id,...r})).filter(r=>!r.fav).sort((a,b)=>a.name.localeCompare(b.name));
   const last=workoutsSorted().find(w=>w.type==="gym"&&(w.exercises||[]).length);
   return seg+(last?`<div class="card hero"><div class="row between"><div><h2>Last session</h2><div class="mid num">${esc(last.name)}</div><div class="muted small">${fmtDate(last.date)} · ${(last.exercises||[]).length} exercises · ${r0(sum(last.exercises,volOf))} kg</div></div><button class="btn primary" data-act="repeatLast">Repeat</button></div></div>`:"")+`
   <div class="grid3">
@@ -800,7 +928,7 @@ function startWorkout(w){S.active={id:uid(),date:ymd(),start:Date.now(),...w};pr
 function activeWorkout(){
   const a=S.active,g=S.settings;
   if(a.type!=="gym"){
-    return `<div class="card"><h2>${esc(a.name)}</h2>
+    return `<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">${esc(a.name)}</h2><button class="btn sm" data-act2="favSave">☆ Save to favourites</button></div>
       <div class="stack">
       <div class="field"><label>Name</label><input id="aName" value="${esc(a.name)}" data-bind="name"></div>
       <div class="grid2"><div class="field"><label>Duration (min)</label><input id="aDur" type="number" inputmode="decimal" value="${esc(a.duration??"")}" data-bind="duration"></div>
@@ -808,7 +936,7 @@ function activeWorkout(){
       <div class="grid2"><div class="field"><label>RPE (1–10)</label><input id="aRpe" type="number" inputmode="numeric" min="1" max="10" value="${esc(a.rpe??"")}" data-bind="rpe"></div><div class="field"><label>Notes</label><input id="aNotes" value="${esc(a.notes??"")}" data-bind="notes"></div></div>
       <div class="grid3 wkbtns"><button class="btn danger" data-act="discard">Discard</button>${startBtn(a)}<button class="btn primary" data-act="finish">Save session</button></div></div></div>`;
   }
-  const top=`<div class="card"><h2>${esc(a.name)}</h2><div class="grid2"><div class="field"><label>Session RPE (1–10)</label><input id="aRpe" type="number" inputmode="numeric" min="1" max="10" value="${esc(a.rpe??"")}" data-bind="rpe"></div><div class="field"><label>Rest timer (s)</label><input id="aRest" type="number" inputmode="numeric" value="${g.restSec}" data-act="restSec"></div></div>
+  const top=`<div class="card"><div class="row between" style="margin-bottom:10px"><h2 style="margin:0">${esc(a.name)}</h2><button class="btn sm" data-act2="favSave">☆ Save to favourites</button></div><div class="grid2"><div class="field"><label>Session RPE (1–10)</label><input id="aRpe" type="number" inputmode="numeric" min="1" max="10" value="${esc(a.rpe??"")}" data-bind="rpe"></div><div class="field"><label>Rest timer (s)</label><input id="aRest" type="number" inputmode="numeric" value="${g.restSec}" data-act="restSec"></div></div>
   <div class="field" style="margin-top:8px"><label>Notes</label><textarea id="aNotes" data-bind="notes">${esc(a.notes??"")}</textarea></div>
   <div class="grid3 wkbtns" style="margin-top:10px"><button class="btn danger" data-act="discard">Discard</button>${startBtn(a)}<button class="btn primary" data-act="finish">Finish workout</button></div></div>`;
   return top+`
@@ -839,8 +967,8 @@ function foodSheet(meal0){let meal=meal0;
   const favs=Object.entries(S.foods).map(([id,f])=>({id,...f})).sort((a,b)=>a.name.localeCompare(b.name));
   const canAI=!!S.sample;
   openSheet(`<h2 id="fsTitle">Add to ${meal}</h2><div class="seg" id="mealSeg">${MEALS.map(m=>`<button aria-pressed="${m===meal}" data-meal="${m}">${m==="Snacks"?"Snack":m}</button>`).join("")}</div>
-  <div class="seg" id="fmode"><button aria-pressed="true" data-m="search">Search</button><button aria-pressed="false" data-m="manual">Manual</button><button aria-pressed="false" data-m="favs">Favourites</button><button aria-pressed="false" data-m="photo">Label photo</button><button aria-pressed="false" data-m="scan">Scan</button></div>
-  <div id="fm-search" class="stack">${canAI?`<div class="row"><input id="fq" placeholder="e.g. 2 scrambled eggs, 100g chicken breast" autocomplete="off"><button class="btn primary" id="fgo">Find</button></div><div class="muted small">Claude estimates calories and macros from the description. Include amounts.</div><div class="results list" id="fres"></div>`:`<div class="banner">Food search needs Claude, which isn't available in this view. Use Manual or Favourites.</div>`}</div>
+  <div class="seg" id="fmode"><button aria-pressed="true" data-m="search">Search</button><button aria-pressed="false" data-m="manual">Manual</button><button aria-pressed="false" data-m="favs">Favourites</button><button aria-pressed="false" data-m="scan">Scan</button></div>
+  <div id="fm-search" class="stack">${canAI?`<div class="row"><input id="fq" placeholder="e.g. chicken breast 150g" autocomplete="off"><button class="btn primary" id="fgo">Find</button></div><div class="muted small">Searches Open Food Facts. Add an amount in grams, e.g. chicken breast 150g. Otherwise values are per 100 g.</div><div class="results list" id="fres"></div>`:`<div class="banner">Food search needs Claude, which isn't available in this view. Use Manual or Favourites.</div>`}</div>
   <div id="fm-manual" class="stack" hidden><div class="field"><label>Name</label><input id="mName"></div><div class="field"><label>Serving (optional)</label><input id="mServ" placeholder="1 bowl, 150 g…"></div>
     <div class="grid2"><div class="field"><label>Calories</label><input id="mCal" type="number" inputmode="decimal"></div><div class="field"><label>Protein g</label><input id="mP" type="number" inputmode="decimal"></div><div class="field"><label>Carbs g</label><input id="mC" type="number" inputmode="decimal"></div><div class="field"><label>Fat g</label><input id="mF" type="number" inputmode="decimal"></div></div>
     <label class="row small"><input type="checkbox" id="mFav" style="width:auto;min-height:0"> Save to favourites</label><button class="btn primary block" id="mAdd">Add</button></div>
@@ -983,7 +1111,7 @@ document.body.addEventListener("change",e=>{if(e.target.dataset.act==="restSec")
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSheet();});
 
 render();
-if(window.claude&&claude.use)connect();
+startFirebase();
 })();
 </script>
 
