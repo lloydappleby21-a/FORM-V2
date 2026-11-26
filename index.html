@@ -1,9 +1,31 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>FORM</title>
+<meta name="theme-color" content="#000000" id="themeMeta">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FORM">
+<script>(function(){try{var g=function(k){return JSON.parse(localStorage.getItem("form."+k)||"null")};var t=g("theme")||"dark",z=g("textSize")||1,d=document.documentElement;var dark=t==="dark"||(t==="system"&&!(window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches));d.setAttribute("data-theme",dark?"dark":"light");d.style.setProperty("--tz",z);}catch(e){}})();</script>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
 /* Layout: one-screen app, fixed bottom tab bar, scrolling view above it. Dark-first, data-dense like a macro tracker. */
+/* ---- Light theme (More → Display) ---- */
+:root[data-theme="light"]{
+  --bg:#F4F2EE; --surface:#FFFFFF; --surface2:#EEEAE4; --line:#D9D3CA;
+  --fg:#141414; --muted:#5F5950; --accent:#E85D00; --accent-fg:#000000;
+  --protein:#D63A2B; --carbs:#C98A00; --fat:#B08A5C; --good:#17793F; --warn:#8F5A00; --bad:#C62828;
+  color-scheme:light;
+}
+:root[data-theme="light"] .sync.ok{color:#17793F;border-color:color-mix(in srgb,#17793F 40%,transparent)}
+:root[data-theme="light"] .card{box-shadow:0 1px 3px rgba(0,0,0,.06)}
+/* ---- Text size (More → Display): scales the content, sheets and messages ---- */
+:root{--tz:1}
+main,.sheet,.toast,.rest{zoom:var(--tz)}
+nav.tabs button{font-size:calc(9.5px * min(var(--tz),1.25))}
 :root{
   --bg:#000000; --surface:#0F0F0F; --surface2:#1B1B1B; --line:#2C2C2C;
   --fg:#F4F1EC; --muted:#9A948B; --accent:#FF6A00; --accent-fg:#000000;
@@ -927,10 +949,59 @@ function wrap(t,h){savePrefs();
   if(["gyms","pts","plan","lib","coach"].includes(t))return `<button class="btn sm" style="align-self:flex-start" data-act2="goTab" data-t="more">‹ More</button>`+h;
   return h;
 }
+const THEMES=[["dark","🌙 Dark"],["light","☀️ Light"],["system","📱 Auto"]],TSIZES=[[1,"A","Standard"],[1.15,"A","Large"],[1.3,"A","Extra large"]];
+function applyDisplay(){
+  const t=LS("theme")||"dark",z=+(LS("textSize")||1),d=document.documentElement;
+  const dark=t==="dark"||(t==="system"&&!(window.matchMedia&&matchMedia("(prefers-color-scheme: light)").matches));
+  d.setAttribute("data-theme",dark?"dark":"light");d.style.setProperty("--tz",z);
+  const m=document.getElementById("themeMeta");if(m)m.setAttribute("content",dark?"#000000":"#F4F2EE");
+}
+if(window.matchMedia){try{matchMedia("(prefers-color-scheme: light)").addEventListener("change",()=>{if((LS("theme")||"dark")==="system")applyDisplay();});}catch(e){}}
+applyDisplay();
+function displayCard(){
+  const t=LS("theme")||"dark",z=+(LS("textSize")||1);
+  return `<div class="card"><h2>Display</h2>
+    <div class="field"><label>Theme</label><div class="seg" role="group" aria-label="Theme">${THEMES.map(([k,l])=>`<button aria-pressed="${t===k}" data-act2="setTheme" data-v="${k}">${l}</button>`).join("")}</div></div>
+    <div class="field" style="margin-top:10px"><label>Text size</label><div class="seg" role="group" aria-label="Text size">${TSIZES.map(([v,a,l],i)=>`<button aria-pressed="${Math.abs(z-v)<.01}" data-act2="setText" data-v="${v}" aria-label="${l} text"><span style="font-size:${12+i*3}px;font-weight:700">${a}</span> <span class="small">${l}</span></button>`).join("")}</div></div>
+    <div class="muted small" style="margin-top:8px">Light mode is easier to read in bright gyms and outdoors. Auto follows your phone's setting. These settings are saved on this device.</div></div>`;
+}
+document.addEventListener("click",e=>{
+  const b=e.target.closest('[data-act2="setTheme"],[data-act2="setText"]');if(!b)return;
+  if(b.dataset.act2==="setTheme"){LS("theme",b.dataset.v);toast(b.dataset.v==="system"?"Theme follows your device":b.dataset.v==="light"?"Light mode on":"Dark mode on");}
+  else{LS("textSize",+b.dataset.v);toast("Text size updated");}
+  applyDisplay();render();
+});
+// ---------- install as an app (PWA) ----------
+const PWA={evt:null,installed:false,update:null};
+const isStandalone=()=>(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();PWA.evt=e;if(S.tab==="more")render();});
+window.addEventListener("appinstalled",()=>{PWA.installed=true;PWA.evt=null;toast("FORM installed. Open it from your home screen");if(S.tab==="more")render();});
+function installCard(){
+  if(isStandalone())return `<div class="card"><div class="row between"><h2>App</h2><span class="pill on">Installed ✓</span></div><div class="muted small">You're using the FORM app. It opens full screen and works offline; your logs sync when you're back online.</div>${PWA.update?`<button class="btn primary block" style="margin-top:8px" data-act2="pwaUpdate">Update available. Tap to refresh</button>`:""}</div>`;
+  if(location.protocol==="file:")return "";
+  const how=isIOS()?`<ol class="muted small" style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li>Open this page in <b>Safari</b>.</li><li>Tap the <b>Share</b> button <span aria-hidden="true">(□↑)</span>.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol>`
+    :`<ol class="muted small" style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li>Open the browser menu <b>⋮</b> (top right).</li><li>Tap <b>Install app</b> or <b>Add to Home screen</b>.</li></ol>`;
+  return `<div class="card hero"><h2>📲 Install FORM</h2><div class="small" style="margin-bottom:8px">Add FORM to your home screen. It opens full screen like a normal app, starts instantly and works in gyms with poor signal.</div>
+    ${PWA.evt?`<button class="btn primary block" data-act2="pwaInstall">Install app</button>`:`<details ${isIOS()?"open":""}><summary class="small" style="cursor:pointer;font-weight:600">How to install</summary>${how}</details>`}</div>`;
+}
+document.addEventListener("click",async e=>{
+  const b=e.target.closest('[data-act2="pwaInstall"],[data-act2="pwaUpdate"]');if(!b)return;
+  if(b.dataset.act2==="pwaInstall"&&PWA.evt){PWA.evt.prompt();try{const r=await PWA.evt.userChoice;if(r&&r.outcome==="accepted")toast("Installing FORM…");}catch(x){}PWA.evt=null;render();}
+  else if(b.dataset.act2==="pwaUpdate"&&PWA.update){PWA.update.postMessage("skipWaiting");}
+});
+if("serviceWorker" in navigator&&location.protocol==="https:"){
+  window.addEventListener("load",()=>{navigator.serviceWorker.register("sw.js").then(reg=>{
+    const watch=w=>{if(!w)return;w.addEventListener("statechange",()=>{if(w.state==="installed"&&navigator.serviceWorker.controller){PWA.update=w;toast("A new version of FORM is ready");if(S.tab==="more")render();}});};
+    watch(reg.installing);reg.addEventListener("updatefound",()=>watch(reg.installing));
+    setInterval(()=>reg.update().catch(()=>{}),60*60*1000);
+  }).catch(err=>console.warn("sw",err));});
+  let reloaded=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(reloaded||!PWA.update)return;reloaded=true;location.reload();});
+}
 function more(){
   const it=[["gyms","Gyms","Hours, ratings and kit for gyms near you"],["pts","Personal trainers","Scored by review volume and rating"],["plan","Workout planner","Build a session around a gym's equipment"],["lib","Exercise library","Form cues and demo videos"]];
   if(S.isCoach)it.push(["coach","Coach dashboard","See each member's food, workouts and weight"]);
-  return it.map(x=>`<button class="card" style="text-align:left;width:100%" data-act2="goTab" data-t="${x[0]}"><div class="mid num">${x[1]}</div><div class="muted small" style="margin-top:6px">${x[2]}</div></button>`).join("")+`<div class="muted small">${S.email?"Signed in as "+esc(S.email)+". ":""}Your entries are saved to your account. The app owner can view members' logged food, workouts and body stats to coach them.</div><button class="btn block" data-act2="signOut">Sign out</button>`;
+  return it.map(x=>`<button class="card" style="text-align:left;width:100%" data-act2="goTab" data-t="${x[0]}"><div class="mid num">${x[1]}</div><div class="muted small" style="margin-top:6px">${x[2]}</div></button>`).join("")+installCard()+displayCard()+`<div class="muted small">${S.email?"Signed in as "+esc(S.email)+". ":""}Your entries are saved to your account. The app owner can view members' logged food, workouts and body stats to coach them.</div><button class="btn block" data-act2="signOut">Sign out</button>`;
 }
 const SPL={ppl:["Push","Pull","Legs"],ul:["Upper","Lower"],fb:["Full body"]};
 const DAYM={Push:["Chest","Shoulders","Triceps"],Pull:["Back","Biceps"],Legs:["Quads","Hamstrings","Glutes","Calves"],Upper:["Chest","Back","Shoulders","Biceps","Triceps"],Lower:["Quads","Hamstrings","Glutes","Calves","Core"],"Full body":["Chest","Back","Quads","Shoulders","Hamstrings","Core"]};
@@ -1809,6 +1880,7 @@ document.body.addEventListener("input",e=>{
 document.body.addEventListener("change",e=>{if(e.target.dataset.act==="restSec")save("settings","main",{...S.settings,restSec:+e.target.value||90});});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSheet();});
 
+{const qt=new URLSearchParams(location.search).get("tab");if(qt&&["today","food","train","body","stats","more"].includes(qt))S.tab=qt;if(qt||location.search.includes("source=pwa"))history.replaceState(null,"",location.pathname);}
 render();
 startFirebase();
 })();
